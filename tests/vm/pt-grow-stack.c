@@ -10,8 +10,9 @@
 void
 test_main (void)
 {
+  //char stack_obj[3920-258]; // 3950 -> 터짐 // 3920 에서 안터짐 3921 터짐 -> 176
   char stack_obj[4096];
-  struct arc4 arc4;
+  struct arc4 arc4; // -> 258
 
   arc4_init (&arc4, "foobar", 6);
   memset (stack_obj, 0, sizeof stack_obj);

@@ -313,14 +313,14 @@ tid_t thread_tid(void)
 void thread_exit(void)
 {
 	ASSERT(!intr_context());
-
+	intr_disable();
 #ifdef USERPROG
 	process_exit();
 #endif
 
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
-	intr_disable();
+	// intr_disable();
 	do_schedule(THREAD_DYING);
 	NOT_REACHED();
 }

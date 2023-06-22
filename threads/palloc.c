@@ -340,6 +340,7 @@ init_pool (struct pool *p, void **bm_base, uint64_t start, uint64_t end) {
 	lock_init(&p->lock);
 	p->used_map = bitmap_create_in_buf (pgcnt, *bm_base, bm_pages);
 	p->base = (void *) start;
+	// printf("++++++++++++++ %llx\n",p->base);
 
 	// Mark all to unusable.
 	bitmap_set_all(p->used_map, true);
