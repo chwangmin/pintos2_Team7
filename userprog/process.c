@@ -691,15 +691,8 @@ install_page (void *upage, void *kpage, bool writable) {
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
-struct lazy_load_arg		// lazy_load 구조체 설정.
-{
-	struct file *file;		// 파일 객체 저장할 구조체
-	off_t ofs;				// 이 페이지에서 읽기 시작할 위치
-	uint32_t read_bytes;	// 이 페이지에서 읽어야 하는 바이트 수
-	uint32_t zero_bytes;	// 이 페이지에서 read_bytes만큼 읽고 공간이 남아 0으로 채워야 하는 바이트 수
-};
 
-static bool
+bool
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */

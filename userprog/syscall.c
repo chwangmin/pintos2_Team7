@@ -35,6 +35,9 @@ unsigned tell(int fd);
 void close(int fd);
 tid_t fork(const char *thread_name, struct intr_frame *f);
 
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
+
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -114,6 +117,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_CLOSE:
 		close(f->R.rdi);
+		break;
+	case SYS_MMAP:
+		f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
+		break;
 	}
 }
 
@@ -307,4 +317,39 @@ void close(int fd)
 tid_t fork(const char *thread_name, struct intr_frame *f)
 {
 	return process_fork(thread_name, f);
+}
+
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+	// addr가 0을 가리키거나, addr 파일 길이가 0일때.
+	if (!addr || addr != pg_round_down(addr))
+		return NULL;
+
+	// offset이 정렬이 되지 않았을 때
+	if (offset != pg_round_down(offset))
+		return NULL;
+
+	// addr 이 physical 메모리가 아니거나, addr+length가 physical 메모리가 아닐 때
+	if (!is_user_vaddr(addr) || !is_user_vaddr(addr + length))
+		return NULL;
+
+	// 매핑하려는 페이지가 이미 존재하는 페이지와 겹칠 때
+	if (spt_find_page(&thread_current()->spt, addr))
+		return NULL;
+
+	// 파일 가져오기 f로
+	struct file *f = process_get_file(fd);
+	if (f == NULL)
+		return NULL;
+
+	// 파일 길이가 0이거나 페이지 만들 시작 주소 addr이 NULL일 때
+	if (file_length(f) == 0 || (int)length <= 0)
+		return NULL;
+
+	return do_mmap(addr, length, writable, f, offset); // 파일이 매핑된 가상 주소 반환
+}
+
+void munmap(void *addr)
+{
+	do_munmap(addr);
 }

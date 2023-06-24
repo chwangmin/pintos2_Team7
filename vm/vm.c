@@ -4,6 +4,7 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h" // mmu 추가.
+#include "userprog/process.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -108,6 +109,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	hash_delete(&spt->spt_hash, &page->hash_elem);
 	vm_dealloc_page (page);
 	return true;
 }
@@ -158,8 +160,20 @@ static void
 vm_stack_growth (void *addr UNUSED) {
 	/* 스택 크기를 증가시키기 위해 anon page를 하나 이상 할당하여 주어진 주소가 더 이상 
 	예외 주소(faulted address) 가 되지 않도록 합니다. */
-	// printf("good~\n");
-	vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
+	//vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
+
+	addr = pg_round_down(addr);
+	struct page *page = NULL;
+	while(true){
+		//printf("good~~~ %p \n",addr);
+		if(page = (struct page*)spt_find_page(&thread_current()->spt,addr)){
+			break;
+		}else{
+			vm_alloc_page(VM_ANON | VM_MARKER_0, addr, 1); // 1 anon페이지 할당
+			vm_claim_page(addr);
+			addr += 0x1000;
+		}
+	}
 }
 
 /* Handle the fault on write_protected page */
@@ -179,7 +193,21 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 
 	if (is_kernel_vaddr(addr))	// 커널 주소라면 false
 		return false;
+		
+	// printf("----------------------\n");
+	// printf("rsp : %p\n",f->rsp);
+	// printf("&rsp : %p\n",&(f->rsp));
+	// printf("addr : %p\n",addr);
+	// printf("&addr : %p\n",&(addr));
+	// printf("----------------------\n");
+	uintptr_t ofs = 0x4746fe40;  // 시작 오프셋
+	const void* buf = (const void*)ofs;  // 주소를 포인터로 형변환
+	size_t size = 64;  // 확인할 바이트 수 (예: 8바이트)
 
+	bool ascii = true;  // ASCII 문자도 출력할지 여부 (true or false)
+
+	//hex_dump(ofs, buf, size, ascii);
+	
 	if (not_present) // 접근한 메모리의 physical page가 존재하지 않은 경우
 	{
 		/* TODO: Validate the fault */
@@ -191,8 +219,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		// 스택 확장으로 처리할 수 있는 폴트인 경우, vm_stack_growth를 호출
 		if (USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK)
 			vm_stack_growth(addr);
-		else if (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK)
-			vm_stack_growth(addr);
+		// else if (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK)
+		// 	vm_stack_growth(addr);
 
 		page = spt_find_page(spt, addr);		
 		if (page == NULL)
@@ -279,9 +307,24 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			continue;
 		}
 
-		/* 2) type이 uninit이 아니면 */
-		if(!vm_alloc_page_with_initializer(type, upage, writable, NULL, NULL))
-			return false;
+		/* 2) type이 file이면 */
+		if (type == VM_FILE)
+		{
+			struct lazy_load_arg *file_aux = malloc(sizeof(struct lazy_load_arg));
+			file_aux->file = src_page->file.file;
+			file_aux->ofs = src_page->file.ofs;
+			file_aux->read_bytes = src_page->file.read_bytes;
+			if (!vm_alloc_page_with_initializer(type, upage, writable, NULL, file_aux))
+				return false;
+			struct page *file_page = spt_find_page(dst, upage);
+			file_backed_initializer(file_page, type, NULL);
+			pml4_set_page(thread_current()->pml4, file_page->va, src_page->frame->kva, src_page->writable);
+			continue;
+		}
+
+		/* 3) type이 anon이면 */
+		if (!vm_alloc_page(type, upage, writable)) // uninit page 생성 & 초기화
+			return false;						   // init이랑 aux는 Lazy Loading에 필요. 지금 만드는 페이지는 기다리지 않고 바로 내용을 넣어줄 것이므로 필요 없음
 
 		if (!vm_claim_page(upage))
 			return false;

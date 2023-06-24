@@ -10,7 +10,7 @@
 void
 test_main (void)
 {
-  char stk_obj[65536]; // 16개
+  char stk_obj[65536]; // 16개 65536
   struct arc4 arc4;
 
   arc4_init (&arc4, "foobar", 6);
